@@ -16,7 +16,7 @@ window.APP_CONFIG = {
      supabaseUrl: o "Project URL" (ex.: https://abcdxyz.supabase.co)
      supabaseAnonKey: a chave "publishable" (começa com sb_publishable_) ou a antiga chave "anon public".
      Nunca use aqui a chave "secret" nem a "service_role". */
-  supabaseUrl: "https://saxwcnsdhjbkobouxzlk.supabase.co/rest/v1/",
+  supabaseUrl: "https://saxwcnsdhjbkobouxzlk.supabase.co",
   supabaseAnonKey: "sb_publishable_hvwDOX-XGfpHGaIkR4a5_A_hzZ18eAq",
 
   /* Sugestões exibidas no campo "Unidade" ao cadastrar itens. */
