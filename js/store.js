@@ -43,7 +43,6 @@ window.Store = (() => {
         codigo: String(i.codigo || ""),
         unidade: String(i.unidade || "un"),
         quantidade: toInt(i.quantidade),
-        qtdPorKit: Math.max(0, toInt(i.qtdPorKit, 1)),
         estoqueMinimo: Math.max(0, toInt(i.estoqueMinimo)),
       }));
     out.lancamentos = (Array.isArray(db.lancamentos) ? db.lancamentos : [])
@@ -200,12 +199,25 @@ window.Store = (() => {
     }
   }
 
+  /* Aceita o endereço do projeto em qualquer formato copiado do painel do Supabase
+     (com /rest/v1/, barra no final ou sem https://) e mantém só https://xxxx.supabase.co */
+  function limparUrl(url) {
+    let s = String(url).trim().replace(/^["']|["']$/g, "");
+    if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+    try {
+      return new URL(s).origin;
+    } catch (e) {
+      return s.replace(/\/+$/, "");
+    }
+  }
+
   function create(config) {
     if (config && config.supabaseUrl && config.supabaseAnonKey) {
-      return new SupabaseStore(config.supabaseUrl.trim(), config.supabaseAnonKey.trim());
+      const chave = String(config.supabaseAnonKey).trim().replace(/^["']|["']$/g, "");
+      return new SupabaseStore(limparUrl(config.supabaseUrl), chave);
     }
     return new LocalStore();
   }
 
-  return { create, apply, normalize, emptyDb };
+  return { create, apply, normalize, emptyDb, limparUrl };
 })();

@@ -2,16 +2,17 @@
 
 Sistema simples para o setor de marketing da Sapion controlar o estoque dos materiais de marketing, organizados em **kits** e **itens**.
 
+Os kits são só uma **divisão interna** para organizar os itens. O sistema não define quantas unidades de cada item vão num kit: cada envio pode sair com itens faltando ou com itens a mais.
+
 Construído com o **Sapion Design System**: cores, tipografia Sora e Open Sans, raios e sombras da marca, logos oficiais.
 
 ## O que o sistema faz
 
 - **Acesso com senha de administrador.** A senha é pedida sempre que o navegador ou a aba é aberta. O botão "Sair" fica no menu ⋮.
-- **Primeira tela: situação dos kits.** Mostra cada kit com a quantidade de cada item, os alertas de estoque baixo ou esgotado e **quantos kits completos dá para montar** com o estoque atual.
+- **Primeira tela: situação dos kits.** Mostra cada kit com a quantidade disponível de cada item e os alertas de estoque baixo ou esgotado.
 - **Aba Lançamentos.** Últimos lançamentos com filtros por período, tipo, kit e busca livre.
-- **Entradas e saídas**, sempre com **descrição obrigatória** do motivo. É possível lançar:
-  - por **item** (ex.: chegaram 200 canetas);
-  - por **kit completo** (ex.: saíram 20 kits para um seminário). Cada item do kit é baixado de acordo com a quantidade por kit.
+- **Entradas e saídas**, sempre com **descrição obrigatória** do motivo. Um lançamento pode ter **um ou vários itens**, cada um com a sua quantidade, inclusive itens de kits diferentes. Exemplo: saíram 20 canecas, 40 canetas e nenhum adesivo para um seminário, tudo num lançamento só.
+  - Pelo menu **⋯** do kit, "Lançar saída de itens do kit" já abre o lançamento com todos os itens daquele kit. Você preenche só os que vão sair, e as linhas sem quantidade são ignoradas.
 - **Ajuste manual de quantidade** (contagem física, perda, avaria), com motivo obrigatório.
 - **Estorno** de um lançamento feito por engano. O estorno gera um novo lançamento que desfaz o anterior, com motivo, e o histórico fica preservado.
 - **Cadastro livre de kits e itens:** criar, editar, duplicar, excluir e mover itens entre kits. O histórico de lançamentos é mantido mesmo depois de excluir.
@@ -22,7 +23,7 @@ Construído com o **Sapion Design System**: cores, tipografia Sora e Open Sans, 
 
 | Campo | Para que serve |
 |---|---|
-| Qtd. por kit | Quantas unidades vão em cada kit montado. Use 0 para item opcional, que não entra na conta de kits completos. |
+| Kit | Grupo em que o item aparece. Dá para mover o item para outro kit quando quiser. |
 | Estoque mínimo | O item fica como "Estoque baixo" quando a quantidade chega a esse número. Use 0 para não receber alerta. |
 | Quantidade inicial | Só aparece ao cadastrar. Vira uma entrada no histórico. |
 

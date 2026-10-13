@@ -184,16 +184,16 @@
 
   function resumoKit(kit) {
     const itens = itensDoKit(kit.id);
-    const contam = itens.filter((i) => i.qtdPorKit > 0);
-    const completos = contam.length ? Math.max(0, Math.min(...contam.map((i) => Math.floor(i.quantidade / i.qtdPorKit)))) : 0;
-    // A situação do kit considera os itens obrigatórios; itens opcionais (0 por kit) só contam se forem os únicos.
-    const st = (contam.length ? contam : itens).map(statusItem);
+    const st = itens.map(statusItem);
+    const esgotados = st.filter((s) => s.key === "esgotado").length;
+    const baixos = st.filter((s) => s.key === "baixo").length;
+    const unidades = itens.reduce((s, i) => s + i.quantidade, 0);
     let status;
     if (!itens.length) status = { key: "vazio", label: "Sem itens", tone: "neutral" };
-    else if (st.some((s) => s.key === "esgotado")) status = { key: "esgotado", label: "Item esgotado", tone: "danger" };
-    else if (st.some((s) => s.key === "baixo")) status = { key: "baixo", label: "Estoque baixo", tone: "warning" };
+    else if (esgotados) status = { key: "esgotado", label: esgotados === 1 ? "1 item esgotado" : `${esgotados} itens esgotados`, tone: "danger" };
+    else if (baixos) status = { key: "baixo", label: baixos === 1 ? "1 item com estoque baixo" : `${baixos} itens com estoque baixo`, tone: "warning" };
     else status = { key: "ok", label: "Em dia", tone: "success" };
-    return { itens, completos, status, temContagem: contam.length > 0 };
+    return { itens, unidades, status };
   }
 
   const TIPOS = {
@@ -367,8 +367,7 @@
      ====================================================================== */
 
   function viewKits() {
-    const resumos = state.db.kits.map(resumoKit);
-    const completos = resumos.reduce((s, r) => s + r.completos, 0);
+    const unidades = state.db.itens.reduce((s, i) => s + i.quantidade, 0);
     const st = state.db.itens.map(statusItem);
     const baixos = st.filter((s) => s.key === "baixo").length;
     const esgotados = st.filter((s) => s.key === "esgotado").length;
@@ -380,9 +379,9 @@
           <span class="stat__hint">${num(state.db.itens.length)} itens cadastrados</span>
         </div>
         <div class="card stat">
-          <span class="stat__label"><i data-lucide="package-check"></i>Kits completos</span>
-          <span class="stat__value">${num(completos)}</span>
-          <span class="stat__hint">prontos para montar com o estoque atual</span>
+          <span class="stat__label"><i data-lucide="package"></i>Unidades</span>
+          <span class="stat__value">${num(unidades)}</span>
+          <span class="stat__hint">em estoque, somando todos os itens</span>
         </div>
         <div class="card stat stat--warning">
           <span class="stat__label"><i data-lucide="triangle-alert"></i>Estoque baixo</span>
@@ -398,7 +397,7 @@
       <div class="section-head">
         <div>
           <h2>Situação dos kits</h2>
-          <p>Quantidade disponível de cada item e quantos kits completos dá para montar.</p>
+          <p>Quantidade disponível de cada item, agrupada por kit.</p>
         </div>
         <div class="toolbar">
           <div class="search">
@@ -460,13 +459,9 @@
             ${kit.descricao ? `<p class="kit__desc">${esc(kit.descricao)}</p>` : ""}
             <div class="kit__meta">
               <span class="badge badge--${r.status.tone}">${r.status.label}</span>
-              <span class="badge badge--neutral badge--plain">${num(r.itens.length)} ${r.itens.length === 1 ? "item" : "itens"}</span>
+              <span class="badge badge--neutral badge--plain">${num(r.itens.length)} ${r.itens.length === 1 ? "item" : "itens"} · ${num(r.unidades)} un.</span>
             </div>
           </div>
-          ${r.temContagem ? `
-            <div class="kit__complete" title="Quantos kits completos dá para montar com o estoque atual">
-              <strong>${num(r.completos)}</strong><span>${r.completos === 1 ? "kit completo" : "kits completos"}</span>
-            </div>` : ""}
           <button class="icon-btn" type="button" data-action="menu-kit" data-id="${kit.id}" aria-label="Opções do kit ${esc(kit.nome)}" aria-haspopup="menu">
             <i data-lucide="ellipsis"></i>
           </button>
@@ -491,14 +486,14 @@
     const mod = st.key === "ok" ? "" : st.key === "baixo" ? "warning" : "danger";
     const sub = [
       it.codigo ? esc(it.codigo) : "",
-      it.qtdPorKit > 0 ? `${num(it.qtdPorKit)} por kit` : "opcional no kit",
-      it.estoqueMinimo > 0 ? `mín. ${num(it.estoqueMinimo)}` : "",
+      it.estoqueMinimo > 0 ? `mín. ${num(it.estoqueMinimo)}` : "sem estoque mínimo",
+      st.key !== "ok" ? `<strong>${st.label}</strong>` : "",
     ].filter(Boolean).join(" · ");
     return `
       <li class="item">
         <div>
           <div class="item__name">${esc(it.nome)}</div>
-          <div class="item__sub">${sub}${st.key !== "ok" ? ` · <strong>${st.label}</strong>` : ""}</div>
+          <div class="item__sub">${sub}</div>
           <div class="item__bar ${mod ? "item__bar--" + mod : ""}" aria-hidden="true"><span style="width:${pct}%"></span></div>
         </div>
         <div class="item__qty ${mod ? "item__qty--" + mod : ""}">
@@ -611,7 +606,7 @@
     const t = TIPOS[l.tipo] || TIPOS.ajuste;
     const notas = [];
     if (l.estornoDe) notas.push(`<span class="badge badge--neutral badge--plain">Estorno</span>`);
-    if (l.porKit) notas.push(`<span class="cell-note">Kit completo × ${num(l.porKit)}</span>`);
+    if (l.loteId) notas.push(`<span class="cell-note">Lançado junto com outros itens</span>`);
     let acao = "";
     if (l.estornadoPor) acao = `<span class="badge badge--neutral badge--plain">Estornado</span>`;
     else if (getItem(l.itemId)) acao = `<button class="icon-btn" type="button" data-action="estornar" data-id="${l.id}" title="Estornar lançamento" aria-label="Estornar lançamento"><i data-lucide="undo-2"></i></button>`;
@@ -677,8 +672,8 @@
 
   function menuKit(id) {
     return [
-      { icon: "arrow-up-from-line", label: "Saída do kit completo", run: () => abrirLancamento({ tipo: "saida", modo: "kit", kitId: id }) },
-      { icon: "arrow-down-to-line", label: "Entrada do kit completo", run: () => abrirLancamento({ tipo: "entrada", modo: "kit", kitId: id }) },
+      { icon: "arrow-up-from-line", label: "Lançar saída de itens do kit", run: () => abrirLancamento({ tipo: "saida", itemIds: itensDoKit(id).map((i) => i.id) }) },
+      { icon: "arrow-down-to-line", label: "Lançar entrada de itens do kit", run: () => abrirLancamento({ tipo: "entrada", itemIds: itensDoKit(id).map((i) => i.id) }) },
       "sep",
       { icon: "plus", label: "Adicionar item", run: () => abrirItem({ kitId: id }) },
       { icon: "pencil", label: "Editar kit", run: () => abrirKit(id) },
@@ -899,22 +894,33 @@
      Lançamento (entrada / saída)
      ---------------------------------------------------------------------- */
 
-  function abrirLancamento({ tipo = "saida", itemId = "", kitId = "", modo = "item" } = {}) {
-    const kits = kitsOrdenados().filter((k) => itensDoKit(k.id).length);
-    if (!kits.length) {
+  function opcoesItens(selecionado) {
+    return `<option value="">Selecione um item</option>` + kitsOrdenados().filter((k) => itensDoKit(k.id).length).map((k) => `
+      <optgroup label="${esc(k.nome)}">
+        ${itensDoKit(k.id).map((i) => `<option value="${i.id}" ${i.id === selecionado ? "selected" : ""}>${esc(i.nome)} (${num(i.quantidade)} ${esc(i.unidade)})</option>`).join("")}
+      </optgroup>`).join("");
+  }
+
+  function linhaLancamento(itemId = "") {
+    return `
+      <div class="line" data-line>
+        <select class="select select--sm" aria-label="Item" data-line-item>${opcoesItens(itemId)}</select>
+        <input class="input input--sm" type="number" min="1" step="1" inputmode="numeric" placeholder="Qtd." aria-label="Quantidade" data-line-qtd>
+        <button type="button" class="icon-btn" data-remove-line title="Remover linha" aria-label="Remover linha"><i data-lucide="x"></i></button>
+        <span class="line__saldo" data-line-saldo></span>
+      </div>`;
+  }
+
+  function abrirLancamento({ tipo = "saida", itemIds = [] } = {}) {
+    if (!state.db.itens.length) {
       toast("Cadastre um kit e seus itens antes de fazer lançamentos.", "error");
       return;
     }
-    const itemOpts = kits.map((k) => `
-      <optgroup label="${esc(k.nome)}">
-        ${itensDoKit(k.id).map((i) => `<option value="${i.id}" ${i.id === itemId ? "selected" : ""}>${esc(i.nome)} — ${num(i.quantidade)} ${esc(i.unidade)}</option>`).join("")}
-      </optgroup>`).join("");
-    const kitOpts = kits.map((k) => `<option value="${k.id}" ${k.id === kitId ? "selected" : ""}>${esc(k.nome)}</option>`).join("");
-
+    const ids = itemIds.filter((id) => getItem(id));
     const body = `
       <div class="field">
         <span class="field__label">Tipo de lançamento</span>
-        <div class="segmented segmented--full" id="seg-tipo">
+        <div class="segmented segmented--full">
           <input type="radio" name="tipo" id="t-entrada" value="entrada" ${tipo === "entrada" ? "checked" : ""}>
           <label for="t-entrada"><i data-lucide="arrow-down-to-line"></i>Entrada</label>
           <input type="radio" name="tipo" id="t-saida" value="saida" ${tipo !== "entrada" ? "checked" : ""}>
@@ -922,137 +928,154 @@
         </div>
       </div>
       <div class="field">
-        <span class="field__label">Lançar por</span>
-        <div class="segmented segmented--full">
-          <input type="radio" name="modo" id="m-item" value="item" ${modo !== "kit" ? "checked" : ""}>
-          <label for="m-item"><i data-lucide="package"></i>Item</label>
-          <input type="radio" name="modo" id="m-kit" value="kit" ${modo === "kit" ? "checked" : ""}>
-          <label for="m-kit"><i data-lucide="boxes"></i>Kit completo</label>
+        <span class="field__label">Itens e quantidades</span>
+        <div class="lines" id="lanc-linhas">${(ids.length ? ids : [""]).map(linhaLancamento).join("")}</div>
+        <div class="lines__foot">
+          <button type="button" class="btn btn--ghost btn--sm" data-add-line><i data-lucide="plus"></i>Adicionar outro item</button>
+          <span class="field__hint" id="lanc-total"></span>
         </div>
+        ${ids.length > 1 ? `<span class="field__hint">Preencha só os itens que vão ser movimentados. Linhas sem quantidade são ignoradas.</span>` : ""}
       </div>
-      <div class="field" data-show="item">
-        <label class="field__label" for="f-item">Item</label>
-        <select class="select" id="f-item" name="itemId">${itemOpts}</select>
-      </div>
-      <div class="field" data-show="kit">
-        <label class="field__label" for="f-kit">Kit</label>
-        <select class="select" id="f-kit" name="kitId">${kitOpts}</select>
-        <span class="field__hint">Movimenta todos os itens do kit, de acordo com a quantidade de cada item por kit.</span>
-      </div>
-      <div class="grid-2">
-        <div class="field">
-          <label class="field__label" for="f-qtd" id="f-qtd-label">Quantidade</label>
-          <input class="input" id="f-qtd" name="qtd" type="number" min="1" step="1" inputmode="numeric" placeholder="0" autofocus>
-        </div>
-        ${campoData()}
-      </div>
-      <div id="lanc-preview"></div>
+      <div id="lanc-alerta"></div>
+      ${campoData()}
       ${campoObs()}
       ${campoResp()}`;
 
-    openModal({
+    const form = openModal({
       title: "Novo lançamento",
-      subtitle: "Registre a movimentação e conte o motivo. Tudo fica no histórico.",
+      subtitle: "Registre um ou vários itens de uma vez e conte o motivo. Tudo fica no histórico.",
       body,
       submitLabel: "Registrar",
-      onMount: (form) => {
-        const update = () => atualizarLancamento(form);
-        form.addEventListener("input", update);
-        form.addEventListener("change", update);
+      onMount: (f) => {
+        const update = () => atualizarLancamento(f);
+        f.addEventListener("input", update);
+        f.addEventListener("change", update);
+        f.addEventListener("click", (e) => {
+          if (e.target.closest("[data-add-line]")) {
+            const lista = $("#lanc-linhas", f);
+            lista.insertAdjacentHTML("beforeend", linhaLancamento());
+            icons();
+            lista.lastElementChild.querySelector("[data-line-item]").focus();
+            update();
+            return;
+          }
+          const rm = e.target.closest("[data-remove-line]");
+          if (rm) {
+            const linha = rm.closest("[data-line]");
+            if (f.querySelectorAll("[data-line]").length > 1) {
+              linha.remove();
+            } else {
+              linha.querySelector("[data-line-item]").value = "";
+              linha.querySelector("[data-line-qtd]").value = "";
+            }
+            update();
+          }
+        });
         update();
       },
-      onSubmit: (form) => salvarLancamento(form),
+      onSubmit: (f) => salvarLancamento(f),
     });
+    const foco = form.querySelector(ids.length ? "[data-line-qtd]" : "[data-line-item]");
+    if (foco) foco.focus();
   }
 
-  function alvosLancamento(form, q) {
+  function lerLinhas(form) {
     const sinal = form.tipo.value === "entrada" ? 1 : -1;
-    if (form.modo.value === "item") {
-      const it = getItem(form.itemId.value);
-      return it ? [{ item: it, delta: sinal * q }] : [];
-    }
-    const kit = getKit(form.kitId.value);
-    if (!kit) return [];
-    return itensDoKit(kit.id).filter((i) => i.qtdPorKit > 0).map((i) => ({ item: i, delta: sinal * q * i.qtdPorKit }));
+    return [...form.querySelectorAll("[data-line]")].map((el) => {
+      const itemId = el.querySelector("[data-line-item]").value;
+      const bruto = el.querySelector("[data-line-qtd]").value.trim();
+      const q = inteiro(bruto, 1);
+      return { el, itemId, item: getItem(itemId), bruto, q, delta: q ? sinal * q : 0 };
+    });
   }
 
   function atualizarLancamento(form) {
     const tipo = form.tipo.value;
-    const modo = form.modo.value;
-    form.querySelectorAll("[data-show]").forEach((el) => { el.hidden = el.dataset.show !== modo; });
-    $("#f-qtd-label", form).textContent = modo === "kit" ? "Quantidade de kits" : "Quantidade";
     $("#f-obs", form).placeholder = tipo === "entrada"
       ? "Ex.: Recebimento da gráfica, NF 4512, reposição para o segundo semestre"
-      : "Ex.: Envio para o Seminário de Educação em Colatina, solicitado pela equipe comercial";
-    const btn = form.querySelector('[type="submit"]');
-    btn.textContent = tipo === "entrada" ? "Registrar entrada" : "Registrar saída";
+      : "Ex.: Envio para o Seminário de Educação em Colatina, solicitado pela equipe comercial. Foi sem os adesivos.";
+    form.querySelector('[type="submit"]').textContent = tipo === "entrada" ? "Registrar entrada" : "Registrar saída";
 
-    const q = inteiro(form.qtd.value, 1) || 0;
-    const alvos = alvosLancamento(form, q);
-    const prev = $("#lanc-preview", form);
-    if (!alvos.length) {
-      prev.innerHTML = modo === "kit"
-        ? `<div class="callout callout--warning"><i data-lucide="triangle-alert"></i><div>Este kit não tem itens que contam para o kit completo.</div></div>`
-        : "";
-      icons();
-      return;
+    const linhas = lerLinhas(form);
+    const vezes = {};
+    linhas.forEach((l) => { if (l.itemId) vezes[l.itemId] = (vezes[l.itemId] || 0) + 1; });
+    let total = 0;
+    let nItens = 0;
+    const falta = [];
+    for (const l of linhas) {
+      const saldo = l.el.querySelector("[data-line-saldo]");
+      if (!l.item) {
+        saldo.innerHTML = "";
+        continue;
+      }
+      const repetido = vezes[l.itemId] > 1 ? ` · <span class="text-danger">item repetido em outra linha</span>` : "";
+      if (!l.q) {
+        saldo.innerHTML = `Em estoque: ${num(l.item.quantidade)} ${esc(l.item.unidade)}${repetido}`;
+        continue;
+      }
+      const novo = l.item.quantidade + l.delta;
+      total += l.q;
+      nItens++;
+      if (novo < 0) falta.push(l.item);
+      saldo.innerHTML = `Saldo: ${num(l.item.quantidade)} → <strong class="${novo < 0 ? "text-danger" : ""}">${num(novo)}</strong> ${esc(l.item.unidade)}${repetido}`;
     }
-    const falta = alvos.filter((a) => a.item.quantidade + a.delta < 0);
-    let html = "";
-    if (modo === "item") {
-      html = resumoSaldo(alvos[0].item.quantidade, alvos[0].delta, alvos[0].item.unidade);
-    } else {
-      html = `
-        <div class="preview table-wrap">
-          <table class="table">
-            <thead><tr><th>Item</th><th class="num">Por kit</th><th class="num">Movimento</th><th class="num">Saldo após</th></tr></thead>
-            <tbody>
-              ${alvos.map((a) => {
-                const novo = a.item.quantidade + a.delta;
-                return `<tr>
-                  <td>${esc(a.item.nome)}</td>
-                  <td class="num">${num(a.item.qtdPorKit)}</td>
-                  <td class="num"><span class="delta ${a.delta > 0 ? "delta--in" : a.delta < 0 ? "delta--out" : ""}">${signed(a.delta)}</span></td>
-                  <td class="num" style="color:${novo < 0 ? "var(--state-danger)" : "inherit"}">${num(a.item.quantidade)} → <strong>${num(novo)}</strong></td>
-                </tr>`;
-              }).join("")}
-            </tbody>
-          </table>
-        </div>`;
-    }
-    if (falta.length && q > 0) {
-      html += `<div class="callout callout--danger"><i data-lucide="circle-alert"></i><div>Estoque insuficiente para ${falta.map((a) => `<strong>${esc(a.item.nome)}</strong> (disponível: ${num(a.item.quantidade)})`).join(", ")}.</div></div>`;
-    }
-    prev.innerHTML = html;
+    $("#lanc-total", form).textContent = nItens ? `${nItens} ${nItens === 1 ? "item" : "itens"} · ${num(total)} ${total === 1 ? "unidade" : "unidades"}` : "";
+    $("#lanc-alerta", form).innerHTML = falta.length
+      ? `<div class="callout callout--danger"><i data-lucide="circle-alert"></i><div>Estoque insuficiente para ${falta.map((it) => `<strong>${esc(it.nome)}</strong> (disponível: ${num(it.quantidade)})`).join(", ")}.</div></div>`
+      : "";
     icons();
   }
 
+  function erroLinha(form, linhaEl, seletor, msg) {
+    formError(form, msg);
+    const el = linhaEl && linhaEl.querySelector(seletor);
+    if (el) {
+      el.setAttribute("aria-invalid", "true");
+      el.focus();
+    }
+    return false;
+  }
+
   async function salvarLancamento(form) {
-    const q = inteiro(form.qtd.value, 1);
-    if (!q) return fieldError(form, "qtd", "Informe uma quantidade inteira maior que zero.");
+    let linhas = lerLinhas(form);
+    for (const l of linhas) {
+      if (l.bruto && !l.q) return erroLinha(form, l.el, "[data-line-qtd]", `Quantidade inválida${l.item ? " em " + l.item.nome : ""}. Use um número inteiro maior que zero.`);
+      if (l.bruto && !l.item) return erroLinha(form, l.el, "[data-line-item]", "Escolha o item da linha em que você preencheu a quantidade.");
+    }
+    linhas = linhas.filter((l) => l.item && l.q);
+    if (!linhas.length) {
+      const primeira = form.querySelector("[data-line]");
+      const semItem = !primeira.querySelector("[data-line-item]").value;
+      return erroLinha(form, primeira, semItem ? "[data-line-item]" : "[data-line-qtd]", "Informe pelo menos um item com a quantidade.");
+    }
+    const ids = linhas.map((l) => l.itemId);
+    const repetido = linhas.find((l, i) => ids.indexOf(l.itemId) !== i);
+    if (repetido) return erroLinha(form, repetido.el, "[data-line-item]", `O item ${repetido.item.nome} aparece em mais de uma linha. Junte as quantidades numa linha só.`);
     const comuns = lerComuns(form);
     if (!comuns) return false;
-    if (form.modo.value === "item" && !getItem(form.itemId.value)) return fieldError(form, "itemId", "Selecione um item.");
-    if (form.modo.value === "kit" && !getKit(form.kitId.value)) return fieldError(form, "kitId", "Selecione um kit.");
 
     await sincronizar();
-    const alvos = alvosLancamento(form, q);
-    if (!alvos.length) return formError(form, "Não encontramos itens para movimentar. Atualize a página e tente de novo.");
+    const alvos = [];
+    for (const l of linhas) {
+      const item = getItem(l.itemId);
+      if (!item) return formError(form, `O item ${l.item.nome} não existe mais. Atualize a página e tente de novo.`);
+      alvos.push({ item, delta: l.delta });
+    }
     const falta = alvos.filter((a) => a.item.quantidade + a.delta < 0);
     if (falta.length) {
-      return formError(form, "Estoque insuficiente: " + falta.map((a) => `${a.item.nome} (disponível ${num(a.item.quantidade)}, necessário ${num(-a.delta)})`).join("; ") + ". Ajuste a quantidade ou faça um ajuste de estoque antes.");
+      return formError(form, "Estoque insuficiente: " + falta.map((a) => `${a.item.nome} (disponível ${num(a.item.quantidade)}, necessário ${num(-a.delta)})`).join("; ") + ". Corrija a quantidade ou faça um ajuste de estoque antes.");
     }
     const tipo = form.tipo.value;
-    const porKit = form.modo.value === "kit";
     const criadoEm = nowIso();
-    const loteId = porKit ? uid() : null;
+    const loteId = alvos.length > 1 ? uid() : null;
     const lancamentos = [];
     const itens = [];
     for (const a of alvos) {
-      lancamentos.push(novoLanc(a.item, { tipo, delta: a.delta, ...comuns, criadoEm, extra: porKit ? { loteId, porKit: q } : {} }));
+      lancamentos.push(novoLanc(a.item, { tipo, delta: a.delta, ...comuns, criadoEm, extra: loteId ? { loteId } : {} }));
       itens.push({ ...a.item, quantidade: a.item.quantidade + a.delta, atualizadoEm: criadoEm });
     }
-    return salvar({ upsert: { lancamentos, itens } }, tipo === "entrada" ? "Entrada registrada." : "Saída registrada.");
+    const nome = tipo === "entrada" ? "Entrada" : "Saída";
+    return salvar({ upsert: { lancamentos, itens } }, alvos.length > 1 ? `${nome} de ${alvos.length} itens registrada.` : `${nome} registrada.`);
   }
 
   /* ----------------------------------------------------------------------
@@ -1242,7 +1265,7 @@
           <label class="field__label" for="f-nome">Nome do item</label>
           <input class="input" id="f-nome" name="nome" maxlength="100" value="${esc(it ? it.nome : "")}" placeholder="Ex.: Caneca personalizada" autofocus>
         </div>
-        <div class="grid-3">
+        <div class="grid-2">
           <div class="field">
             <label class="field__label" for="f-codigo">Código <span class="opt">(opcional)</span></label>
             <input class="input" id="f-codigo" name="codigo" maxlength="40" value="${esc(it ? it.codigo : "")}" placeholder="Ex.: CAN-01">
@@ -1251,10 +1274,6 @@
             <label class="field__label" for="f-unidade">Unidade</label>
             <input class="input" id="f-unidade" name="unidade" maxlength="20" list="lista-unidades" value="${esc(it ? it.unidade : "un")}">
             <datalist id="lista-unidades">${unidades}</datalist>
-          </div>
-          <div class="field">
-            <label class="field__label" for="f-qtdPorKit">Qtd. por kit</label>
-            <input class="input" id="f-qtdPorKit" name="qtdPorKit" type="number" min="0" step="1" inputmode="numeric" value="${it ? it.qtdPorKit : 1}">
           </div>
         </div>
         <div class="${it ? "" : "grid-2"}">
@@ -1272,8 +1291,7 @@
         </div>
         ${it ? `
           <div class="callout"><i data-lucide="info"></i><div>Para mudar a quantidade em estoque (hoje: <strong>${num(it.quantidade)} ${esc(it.unidade)}</strong>), use <strong>Ajustar quantidade</strong> ou faça um lançamento. Assim o histórico fica completo.</div></div>`
-        : `<div id="obs-inicial" hidden>${campoObs({ value: "Estoque inicial no cadastro do item" })}</div>`}
-        <p class="field__hint">Qtd. por kit: quantas unidades deste item vão em cada kit montado. Use 0 se o item for opcional e não deve contar para os kits completos.</p>`,
+        : `<div id="obs-inicial" hidden>${campoObs({ value: "Estoque inicial no cadastro do item" })}</div>`}`,
       submitLabel: it ? "Salvar alterações" : "Adicionar item",
       onMount: (form) => {
         if (it) return;
@@ -1288,8 +1306,6 @@
         if (state.db.itens.some((x) => x.id !== id && x.kitId === kitIdSel && norm(x.nome) === norm(nome))) {
           return fieldError(form, "nome", "Esse kit já tem um item com esse nome.");
         }
-        const qtdPorKit = inteiro(form.qtdPorKit.value, 0);
-        if (qtdPorKit == null) return fieldError(form, "qtdPorKit", "Use um número inteiro (0 ou mais).");
         const minimo = inteiro(form.minimo.value, 0);
         if (minimo == null) return fieldError(form, "minimo", "Use um número inteiro (0 ou mais).");
         const unidade = form.unidade.value.trim() || "un";
@@ -1297,13 +1313,14 @@
 
         if (it) {
           const atual = getItem(id) || it;
-          const item = { ...atual, kitId: kitIdSel, nome, codigo: form.codigo.value.trim(), unidade, qtdPorKit, estoqueMinimo: minimo, atualizadoEm: agora };
+          const item = { ...atual, kitId: kitIdSel, nome, codigo: form.codigo.value.trim(), unidade, estoqueMinimo: minimo, atualizadoEm: agora };
+          delete item.qtdPorKit;
           return salvar({ upsert: { itens: [item] } }, "Item atualizado.");
         }
 
         const inicial = inteiro(form.inicial.value, 0);
         if (inicial == null) return fieldError(form, "inicial", "Use um número inteiro (0 ou mais).");
-        const item = { id: uid(), kitId: kitIdSel, nome, codigo: form.codigo.value.trim(), unidade, qtdPorKit, estoqueMinimo: minimo, quantidade: 0, criadoEm: agora, atualizadoEm: agora };
+        const item = { id: uid(), kitId: kitIdSel, nome, codigo: form.codigo.value.trim(), unidade, estoqueMinimo: minimo, quantidade: 0, criadoEm: agora, atualizadoEm: agora };
         const changes = { upsert: { itens: [item] } };
         if (inicial > 0) {
           const obs = form.obs.value.trim();
@@ -1443,27 +1460,27 @@
     XLSX.utils.book_append_sheet(wb, sheet(resumo, [38, 48]), "Resumo");
 
     // Estoque atual por item
-    const estoque = [["Kit", "Item", "Código", "Unidade", "Qtd. disponível", "Estoque mínimo", "Qtd. por kit", "Situação"]];
+    const estoque = [["Kit", "Item", "Código", "Unidade", "Qtd. disponível", "Estoque mínimo", "Situação"]];
     for (const k of kits) {
       for (const i of itensDoKit(k.id)) {
-        estoque.push([k.nome, i.nome, i.codigo, i.unidade, i.quantidade, i.estoqueMinimo, i.qtdPorKit, statusItem(i).label]);
+        estoque.push([k.nome, i.nome, i.codigo, i.unidade, i.quantidade, i.estoqueMinimo, statusItem(i).label]);
       }
     }
-    XLSX.utils.book_append_sheet(wb, sheet(estoque, [28, 34, 14, 10, 16, 16, 13, 16]), "Estoque atual");
+    XLSX.utils.book_append_sheet(wb, sheet(estoque, [28, 34, 14, 10, 16, 16, 16]), "Estoque atual");
 
     // Situação dos kits
-    const kitsRows = [["Kit", "Descrição", "Itens", "Kits completos disponíveis", "Situação"]];
+    const kitsRows = [["Kit", "Descrição", "Itens", "Unidades em estoque", "Situação"]];
     for (const k of kits) {
       const r = resumoKit(k);
-      kitsRows.push([k.nome, k.descricao, r.itens.length, r.temContagem ? r.completos : "—", r.status.label]);
+      kitsRows.push([k.nome, k.descricao, r.itens.length, r.unidades, r.status.label]);
     }
-    XLSX.utils.book_append_sheet(wb, sheet(kitsRows, [28, 44, 8, 26, 16]), "Kits");
+    XLSX.utils.book_append_sheet(wb, sheet(kitsRows, [28, 44, 8, 20, 28]), "Kits");
 
     // Lançamentos do período
     const lancRows = [["Data", "Tipo", "Kit", "Item", "Quantidade", "Saldo anterior", "Saldo após", "Descrição", "Responsável", "Observações do sistema"]];
     for (const l of lancs) {
       const notas = [];
-      if (l.porKit) notas.push(`Kit completo × ${l.porKit}`);
+      if (l.loteId) notas.push("Lançado junto com outros itens");
       if (l.estornoDe) notas.push("Estorno de outro lançamento");
       if (l.estornadoPor) notas.push("Estornado");
       lancRows.push([
@@ -1573,8 +1590,8 @@
         renderView();
         break;
       case "novo-lancamento": abrirLancamento(); break;
-      case "entrada": abrirLancamento({ tipo: "entrada", itemId: id }); break;
-      case "saida": abrirLancamento({ tipo: "saida", itemId: id }); break;
+      case "entrada": abrirLancamento({ tipo: "entrada", itemIds: [id] }); break;
+      case "saida": abrirLancamento({ tipo: "saida", itemIds: [id] }); break;
       case "ajustar": abrirAjuste(id); break;
       case "novo-kit": abrirKit(); break;
       case "novo-item": abrirItem({ kitId: el.dataset.kit }); break;
